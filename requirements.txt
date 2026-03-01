@@ -6,7 +6,7 @@ python-pptx
 requests
 aiofiles
 googletrans==4.0.0rc1
-torch==2.0.1
+torch>=2.0.1
 transformers==4.35.2
 sentencepiece
 azure-ai-translation-document
