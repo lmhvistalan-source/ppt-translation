@@ -197,6 +197,13 @@ class GoogleTranslator(TranslatorBase):
     def __init__(self):
         from googletrans import Translator
         self._translator_cls = Translator
+        self._target_lang_map = {
+            "zh-hans": "zh-cn",
+            "zh-hant": "zh-tw",
+        }
+
+    def _normalize_target(self, target: str) -> str:
+        return self._target_lang_map.get(target.lower(), target)
 
     @staticmethod
     def _run_coro_sync(coro):
@@ -235,11 +242,15 @@ class GoogleTranslator(TranslatorBase):
         await translator.client.aclose()
         return [item.text if hasattr(item, "text") else str(item) for item in raw]
 
+    async def _translate_single_async(self, text: str, target: str) -> str:
+        translator = self._translator_cls()
+        raw = await translator.translate(text, dest=target)
+        await translator.client.aclose()
+        return raw.text if hasattr(raw, "text") else str(raw)
+
     def translate_texts(self, texts: List[str], target: str) -> List[str]:
         """Translate a list of texts using Google Translate."""
-        # Skip translation if target is English (assume source is also English)
-        if target.lower() == "en":
-            return texts
+        target = self._normalize_target(target)
 
         non_empty_idx = [i for i, text in enumerate(texts) if text and text.strip()]
         non_empty_texts = [texts[i] for i in non_empty_idx]
@@ -253,7 +264,13 @@ class GoogleTranslator(TranslatorBase):
                 results[i] = t
         except Exception as e:
             print(f"Warning: batch translation failed: {e}")
-            return texts
+            # Fallback to per-segment translation so one bad segment does not fail all.
+            for i in non_empty_idx:
+                try:
+                    results[i] = self._run_coro_sync(self._translate_single_async(texts[i], target))
+                except Exception as item_exc:
+                    print(f"Warning: segment translation failed at index {i}: {item_exc}")
+                    results[i] = texts[i]
         return results
 
     def translate_file(self, input_path: str, target: str) -> str:
