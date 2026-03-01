@@ -2,6 +2,8 @@ import os
 import time
 import uuid
 import tempfile
+import asyncio
+import threading
 from pathlib import Path
 from typing import List
 
@@ -194,26 +196,64 @@ class GoogleTranslator(TranslatorBase):
 
     def __init__(self):
         from googletrans import Translator
-        self.translator = Translator()
+        self._translator_cls = Translator
+
+    @staticmethod
+    def _run_coro_sync(coro):
+        """Run a coroutine from sync code even if an event loop is already running."""
+        try:
+            asyncio.get_running_loop()
+            running_loop = True
+        except RuntimeError:
+            running_loop = False
+
+        if not running_loop:
+            return asyncio.run(coro)
+
+        result = {}
+        error = {}
+
+        def runner():
+            try:
+                result["value"] = asyncio.run(coro)
+            except Exception as exc:
+                error["value"] = exc
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+        t.join()
+        if "value" in error:
+            raise error["value"]
+        return result.get("value")
+
+    async def _translate_batch_async(self, texts: List[str], target: str) -> List[str]:
+        translator = self._translator_cls()
+        raw = await translator.translate(texts, dest=target)
+        if not isinstance(raw, list):
+            raw = [raw]
+        # googletrans 4.x uses an async HTTP client
+        await translator.client.aclose()
+        return [item.text if hasattr(item, "text") else str(item) for item in raw]
 
     def translate_texts(self, texts: List[str], target: str) -> List[str]:
         """Translate a list of texts using Google Translate."""
         # Skip translation if target is English (assume source is also English)
         if target.lower() == "en":
             return texts
-        
-        results = []
-        for text in texts:
-            if not text or text.strip() == "":
-                results.append(text)
-            else:
-                try:
-                    result = self.translator.translate(text, target)
-                    # googletrans returns an object with .text attribute
-                    results.append(result.text if hasattr(result, 'text') else str(result))
-                except Exception as e:
-                    print(f"Warning: translation failed for '{text}': {e}")
-                    results.append(text)  # fallback: return original
+
+        non_empty_idx = [i for i, text in enumerate(texts) if text and text.strip()]
+        non_empty_texts = [texts[i] for i in non_empty_idx]
+        results = list(texts)
+        if not non_empty_texts:
+            return results
+
+        try:
+            translated = self._run_coro_sync(self._translate_batch_async(non_empty_texts, target))
+            for i, t in zip(non_empty_idx, translated):
+                results[i] = t
+        except Exception as e:
+            print(f"Warning: batch translation failed: {e}")
+            return texts
         return results
 
     def translate_file(self, input_path: str, target: str) -> str:
@@ -379,18 +419,15 @@ class AzureDocumentTranslator(TranslatorBase):
 
 
 def get_translator():
-    provider = os.getenv("TRANSLATOR_PROVIDER", "mock").lower()
-    try:
-        if provider == "azure_doc":
-            return AzureDocumentTranslator()
-        if provider == "azure":
-            return AzureTextTranslator()
-        if provider == "google":
-            return GoogleTranslator()
-        if provider == "huggingface":
-            return HuggingFaceTranslator()
+    provider = os.getenv("TRANSLATOR_PROVIDER", "google").lower()
+    if provider == "mock":
         return MockTranslator()
-    except Exception as exc:
-        # Keep the app bootable when optional provider deps/config are invalid.
-        print(f"[WARN] Failed to initialize translator provider '{provider}': {exc}. Falling back to mock.")
-        return MockTranslator()
+    if provider == "azure_doc":
+        return AzureDocumentTranslator()
+    if provider == "azure":
+        return AzureTextTranslator()
+    if provider == "google":
+        return GoogleTranslator()
+    if provider == "huggingface":
+        return HuggingFaceTranslator()
+    raise RuntimeError(f"Unsupported TRANSLATOR_PROVIDER: {provider}")

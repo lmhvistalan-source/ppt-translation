@@ -4,7 +4,7 @@ Small FastAPI application to translate Office documents (`.pptx`, `.ppt`, `.docx
 
 Features:
 - Upload `.pptx`, `.ppt`, `.docx`, `.doc` and select target language (top 10 supported).
-- Uses a pluggable translation provider. Default is a local `mock` provider for testing.
+- Uses a pluggable translation provider. Default is `google`.
 - Converts legacy `.ppt`/`.doc` via LibreOffice (`soffice`) if installed.
 - Deletes uploaded files immediately after processing.
 
@@ -32,7 +32,7 @@ Configuration:
 - To integrate a real provider (Azure/Google), set `TRANSLATOR_PROVIDER` and provider-specific env vars. See `app/translator.py` for the provider interface.
 
 Notes & next steps:
-- The repository uses a `mock` translator by default. I'll add real Azure/Google integration once you confirm provider and credentials.
+- The repository defaults to Google Translate (`TRANSLATOR_PROVIDER=google`).
 - For production, serve behind your internal network (VPN/intranet) and enable private endpoints for cloud providers.
 
 ## Deployment on Render

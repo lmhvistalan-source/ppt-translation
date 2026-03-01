@@ -5,7 +5,7 @@ python-docx
 python-pptx
 requests
 aiofiles
-googletrans==4.0.0rc1
+googletrans==4.0.2
 # Torch, transformers and sentencepiece are only needed for the
 # optional "huggingface" provider.  They are omitted from the
 # default dependency set to simplify deployment on free hosts like
