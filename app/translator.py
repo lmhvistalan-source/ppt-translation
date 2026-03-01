@@ -379,13 +379,18 @@ class AzureDocumentTranslator(TranslatorBase):
 
 
 def get_translator():
-    provider = os.getenv("TRANSLATOR_PROVIDER", "google").lower()
-    if provider == "azure_doc":
-        return AzureDocumentTranslator()
-    if provider == "azure":
-        return AzureTextTranslator()
-    if provider == "google":
-        return GoogleTranslator()
-    if provider == "huggingface":
-        return HuggingFaceTranslator()
-    return GoogleTranslator()  # Default to Google Translate instead of Mock
+    provider = os.getenv("TRANSLATOR_PROVIDER", "mock").lower()
+    try:
+        if provider == "azure_doc":
+            return AzureDocumentTranslator()
+        if provider == "azure":
+            return AzureTextTranslator()
+        if provider == "google":
+            return GoogleTranslator()
+        if provider == "huggingface":
+            return HuggingFaceTranslator()
+        return MockTranslator()
+    except Exception as exc:
+        # Keep the app bootable when optional provider deps/config are invalid.
+        print(f"[WARN] Failed to initialize translator provider '{provider}': {exc}. Falling back to mock.")
+        return MockTranslator()

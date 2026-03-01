@@ -37,6 +37,8 @@ Notes & next steps:
 
 ## Deployment on Render
 
+### Using the Web Dashboard
+
 1. Push this repo to GitHub and sign up at https://render.com (free tier works).
 2. Create a **new Web Service** and connect it to your repository.
 3. When Render asks for a Start Command, do **not** use the naive `uvicorn ... --port $PORT` line; `$PORT` will not expand and your service will exit with status 1. Instead either
@@ -49,6 +51,56 @@ Notes & next steps:
 
 The build should now succeed without installing heavy transformer packages, and the startup command will expand the port properly.
 
+### Using the Render CLI
+
+Render's current CLI is best for deploy/restart/log workflows. For first-time service provisioning, keep a `render.yaml` Blueprint in this repo, then create/sync the service from Render once.
+
+1. Install the CLI:
+
+```bash
+curl -fsSL https://cdn.rndr.com/cli/install.sh | sh
+# or: brew install render
+```
+
+2. Authenticate and set workspace:
+
+```bash
+render login
+render workspaces
+render workspace set <workspace-id-or-name>
+```
+
+3. Validate this repo's Blueprint:
+
+```bash
+render blueprints validate render.yaml
+```
+
+4. Create/sync the service in Render using this repo's `render.yaml` (one-time setup in Dashboard/Blueprint flow).
+
+5. Trigger deploys from CLI:
+
+```bash
+git push origin main
+render services                     # interactive picker
+render deploys create <service-id> --wait
+```
+
+For CI/non-interactive mode:
+
+```bash
+export RENDER_API_KEY=...
+render deploys create <service-id> --wait --confirm -o text
+```
+
+To look up IDs in scripts:
+
+```bash
+render services -o json
+```
+
+> **Important:** keep the start command wrapped in `bash -lc` (or use the Procfile) so `$PORT` is expanded correctly.
+
 ## Optional Dependencies
 
 If you plan to use the `huggingface` provider you will need extra packages:
@@ -56,4 +108,3 @@ If you plan to use the `huggingface` provider you will need extra packages:
   pip install torch transformers sentencepiece
 
 These are intentionally **not** in requirements.txt to avoid build problems on free hosts like Render.
-
