@@ -1,0 +1,366 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Internal Document Translator</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: linear-gradient(135deg, #0047AB 0%, #003580 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+      }
+      .container {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        padding: 40px;
+        max-width: 500px;
+        width: 100%;
+      }
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+        font-size: 28px;
+      }
+      .subtitle {
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 14px;
+      }
+      .form-group {
+        margin-bottom: 20px;
+      }
+      label {
+        display: block;
+        color: #333;
+        font-weight: 500;
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+      input[type="file"],
+      select {
+        width: 100%;
+        padding: 10px;
+        border: 2px solid #e0e0e0;
+        border-radius: 6px;
+        font-size: 14px;
+        transition: border-color 0.3s;
+      }
+      input[type="file"]:focus,
+      select:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+      button {
+        width: 100%;
+        padding: 12px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      button:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .progress-container {
+        margin: 20px 0;
+        display: none;
+      }
+      .progress-container.active {
+        display: block;
+      }
+      .progress-label {
+        font-size: 13px;
+        color: #666;
+        margin-bottom: 6px;
+      }
+      .progress-bar {
+        width: 100%;
+        height: 8px;
+        background: #e0e0e0;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        width: 0%;
+        transition: width 0.2s;
+      }
+      .spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      .message {
+        padding: 12px;
+        border-radius: 6px;
+        margin: 15px 0;
+        display: none;
+        font-size: 14px;
+      }
+      .message.active {
+        display: block;
+      }
+      .message.translating {
+        background: #e3f2fd;
+        color: #1976d2;
+        border-left: 4px solid #1976d2;
+      }
+      .message.success {
+        background: #e8f5e9;
+        color: #388e3c;
+        border-left: 4px solid #388e3c;
+      }
+      .message.error {
+        background: #ffebee;
+        color: #c62828;
+        border-left: 4px solid #c62828;
+      }
+      .note {
+        font-size: 12px;
+        color: #999;
+        text-align: center;
+        margin-top: 20px;
+      }
+      .timer {
+        display: none;
+        font-size: 16px;
+        font-weight: 600;
+        color: #667eea;
+        text-align: center;
+        margin: 10px 0;
+        font-family: 'Courier New', monospace;
+      }
+      .timer.active {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>📄 Document Translator</h1>
+      <p class="subtitle">Translate PowerPoint and Word documents instantly</p>
+      
+      <form id="uploadForm">
+        <div class="form-group">
+          <label for="file">Choose a file (.pptx, .ppt, .docx, .doc):</label>
+          <input type="file" id="file" name="file" accept=".pptx,.ppt,.docx,.doc" required />
+        </div>
+
+        <div class="form-group">
+          <label for="target_lang">Target language:</label>
+          <select id="target_lang" name="target_lang">
+            <option value="en">English</option>
+            <option value="zh-Hans">Chinese (Simplified)</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+            <option value="pt">Portuguese</option>
+            <option value="ru">Russian</option>
+            <option value="it">Italian</option>
+          </select>
+        </div>
+
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-label" id="progressLabel">Uploading...</div>
+          <div class="timer" id="timer">00:00</div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+        </div>
+
+        <div class="message translating" id="translatingMsg">
+          <span class="spinner"></span>Translating your document...
+        </div>
+
+        <div class="message success" id="successMsg">
+          ✓ Translation complete! Your file is ready to download.
+        </div>
+
+        <div class="message error" id="errorMsg"></div>
+
+        <button type="submit" id="submitBtn">Translate</button>
+      </form>
+
+      <p class="note">✓ Your files are deleted immediately after processing</p>
+    </div>
+
+    <script>
+      const form = document.getElementById('uploadForm');
+      const fileInput = document.getElementById('file');
+      const targetLang = document.getElementById('target_lang');
+      const submitBtn = document.getElementById('submitBtn');
+      const progressContainer = document.getElementById('progressContainer');
+      const progressFill = document.getElementById('progressFill');
+      const progressLabel = document.getElementById('progressLabel');
+      const timer = document.getElementById('timer');
+      const translatingMsg = document.getElementById('translatingMsg');
+      const successMsg = document.getElementById('successMsg');
+      const errorMsg = document.getElementById('errorMsg');
+
+      let timerInterval = null;
+      let startTime = null;
+
+      function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      }
+
+      function startTimer() {
+        startTime = Date.now();
+        timer.classList.add('active');
+        timerInterval = setInterval(() => {
+          const elapsed = (Date.now() - startTime) / 1000;
+          timer.textContent = formatTime(elapsed);
+        }, 100);
+      }
+
+      function stopTimer() {
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+        timer.classList.remove('active');
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        // Reset UI
+        progressContainer.classList.add('active');
+        progressFill.style.width = '0%';
+        translatingMsg.classList.add('active');
+        successMsg.classList.remove('active');
+        errorMsg.classList.remove('active');
+        submitBtn.disabled = true;
+        startTimer();
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('target_lang', targetLang.value);
+
+        try {
+          // Create XMLHttpRequest for progress tracking
+          const xhr = new XMLHttpRequest();
+          let uploadComplete = false;
+
+          // Upload progress (0-50%)
+          xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+              const percentComplete = Math.round((e.loaded / e.total) * 50);
+              progressFill.style.width = percentComplete + '%';
+              progressLabel.textContent = `Uploading... ${Math.round((e.loaded / e.total) * 100)}%`;
+            }
+          });
+
+          // When upload finishes, animate to show translation (50-100%)
+          xhr.upload.addEventListener('load', () => {
+            uploadComplete = true;
+            progressLabel.textContent = 'Translating... 0%';
+            // Animate progress from current to 90% during translation
+            let currentProgress = 50;
+            const translationInterval = setInterval(() => {
+              if (uploadComplete && currentProgress < 90) {
+                currentProgress += Math.random() * 15; // Random increments
+                if (currentProgress > 90) currentProgress = 90;
+                progressFill.style.width = currentProgress + '%';
+              } else if (!uploadComplete) {
+                clearInterval(translationInterval);
+              }
+            }, 300);
+          });
+
+          // Load complete
+          xhr.addEventListener('load', () => {
+            // Complete the progress bar
+            progressFill.style.width = '100%';
+            progressLabel.textContent = 'Translation complete!';
+            stopTimer();
+
+            setTimeout(() => {
+              progressContainer.classList.remove('active');
+              translatingMsg.classList.remove('active');
+
+              if (xhr.status === 200) {
+                // Download the file
+                const blob = xhr.response;
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.name.replace(/\.(\w+)$/, `_translated_${targetLang.value}.$1`);
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                successMsg.classList.add('active');
+                setTimeout(() => {
+                  successMsg.classList.remove('active');
+                  submitBtn.disabled = false;
+                }, 3000);
+              } else {
+                const errorText = xhr.responseText || 'Unknown error occurred';
+                errorMsg.textContent = '✗ ' + errorText;
+                errorMsg.classList.add('active');
+                submitBtn.disabled = false;
+              }
+            }, 500);
+          });
+
+          // Error
+          xhr.addEventListener('error', () => {
+            progressContainer.classList.remove('active');
+            translatingMsg.classList.remove('active');
+            stopTimer();
+            errorMsg.textContent = '✗ Network error. Please try again.';
+            errorMsg.classList.add('active');
+            submitBtn.disabled = false;
+          });
+
+          xhr.responseType = 'blob';
+          xhr.open('POST', '/translate');
+          xhr.send(formData);
+
+        } catch (error) {
+          progressContainer.classList.remove('active');
+          translatingMsg.classList.remove('active');
+          stopTimer();
+          errorMsg.textContent = '✗ ' + error.message;
+          errorMsg.classList.add('active');
+          submitBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
